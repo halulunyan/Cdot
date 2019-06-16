@@ -1,0 +1,585 @@
+1.1 Create SVM
+ vserver create -vserver svm01 -subtype default -rootvolume root_svm01 -aggregate aggr1 -rootvolume-security-style unix -language ja.UTF-8 -snapshot-policy default
+
+
+1.2 Check that the aggregate, SVM and rootvolume have been created
+verver show ?instance
+volume show
+
+1.3 Assign aggregates to SVMs
+vserver add-aggregates -vserver svm01 aggr1
+
+1.4 Check if assigned
+vserver show -instance ?vserver svm01
+
+1.5 Add and remove protocols in SVM
+vserver add-protocols ?vserver svm01 -protocols nfs
+vserver remove-protocols -vserver svm01 -protocols cifs,fcp,iscsi,ndmp
+
+1.6 Check the protocol of SVM
+vserver show-protocols
+
+1.7 Create export-policy.
+vserver export-policy create -vserver svm01 -policyname export01
+
+
+1.8 Check that export-policy has been created
+vserver export-policy show
+
+1.9 Set rule to export-policy
+vserver export-policy rule create -vserver svm01 -policyname export01 -clientmatch 0.0.0.0/0 -anon 65534 -rorule sys -rwrule sys -superuser sys
+
+vserver export-policy rule create -vserver svm01 -policyname default -clientmatch 0.0.0.0/0 -anon 65534 -rorule sys -rwrule sys -superuser sys
+
+2.1 Check that rule is set in export-policy
+vserver export-policy rule show
+
+
+
+2.2 Create Certificate Authority (Prerequisite)
+security key-manager setup
+Enter yes and set a key of 32 characters or more
+
+2.3 Create volume For each server
+volume create -vserver svm01 -volume vol_nfs01 -aggregate aggr1 -size 4TB -max-autosize 4TB -encrypt true　
+
+2.4 Create volume DB
+volume create -vserver svm01 -volume vol_nfs02_DB -aggregate aggr1 -size 4TB ?max-autosize 4TB -encrypt true
+volume create -vserver svm01 -volume vol_nfs03_DB -aggregate aggr1 -size 4TB ?max-autosize 4TB -encrypt true
+volume create -vserver svm01 -volume vol_nfs04_DB -aggregate aggr1 -size 4TB ?max-autosize 4TB -encrypt true
+volume create -vserver svm01 -volume vol_nfs05_DB -aggregate aggr1 -size 4TB ?max-autosize 4TB -encrypt true
+
+2.5 Check that volume has been created
+volume show
+
+2.6 Volume creation for lun
+volume create -vserver svm01 -volume vol_lun -aggregate aggr1 -size 8TB -max-autosize 8TB
+
+2.7 lun Created
+lun create -vserver svm01 -size 300g -ostype linux -path /vol/vol_lun/lun1
+
+2.8 vlan Created
+network port vlan create -node cluster1-01 -vlan-name a0a-10
+network port vlan create -node cluster1-02 -vlan-name a0a-10
+
+2.9 Check that VLAN has been created
+network port vlan show
+
+3.1 Create brodecastdomain
+broadcast-domain create -broadcast-domain fg10 -mtu 9000 -ports cluster01:a0a-10
+
+3.2 Verify that failover groups and broadcast domains have been created.
+network interface failover-groups show
+broadcast-domain Domain name from xxx ★ → xxx
+
+3.3 Create NW for svm
+network route create -vserver svm01 -destination 0.0.0.0/0 -gateway xxx.xx.x.xx
+
+3.4 Create data LIF # 1
+network interface create -vserver svm01 -lif lif-nfs01 -role data -data-protocol nfs -home-node cluster1-01 -home-port a0a-10 -address xxx.xx.x.xx -netmask xxx.xx.x.xx -failover-group fg10
+
+3.5 Create data LIF # 2
+ network interface create -vserver svm01 -lif lif-nfs02 -role data -data-protocol nfs -home-node cluster1-02 -home-port a0a-10 -address xxx.xx.x.xx -netmask xxx.xx.x.xx -failover-group fg10
+
+3.6 Check that LIF for NFS has been created
+network interface show lif-nfs01,lif-nfs02
+
+3.7 NFS settings
+nfs on -vserver svm01
+
+3.8 Check that NFS is enabled
+nfs status -vserver svm01
+
+3.9 Apply export policy to exported volume
+volume modify -vserver svm01 -volume vol_nfs01 -policy export01 
+volume modify -vserver svm01 -volume vol_nfs02 -policy export01 
+volume modify -vserver svm01 -volume vol_nfs03_DB -policy export01 
+volume modify -vserver svm01 -volume vol_nfs04_DB -policy export01 
+volume modify -vserver svm01 -volume vol_nfs05_DB -policy export01 
+
+4.1 Check that export-policy has been applied to volume
+volume show -fields policy
+
+5.1 volume mount
+vol show -fields junction-path
+vol mount -vserver svm01 -volume vol_nfs01 -junction-path /vol_nfs01
+vol mount -vserver svm01 -volume vol_nfs02 -junction-path /vol_nfs02
+vol mount -vserver svm01 -volume vol_nfs03_DB -junction-path /vol_nfs03_DB
+vol mount -vserver svm01 -volume vol_nfs04_DB -junction-path /vol_nfs04_DB
+vol mount -vserver svm01 -volume vol_nfs05_DB -junction-path /vol_nfs05_DB
+
+
+
+
+5.2 Mount ESXi
+DateStore aicon add
+Coice NFS
+Coice NFS3
+DateStoreName folda ServerName Input
+
+5.3 NTP Configuration
+cluster time-service ntp server create -server xxx.xx.x.xx
+cluster time-service ntp server create -server xxx.xx.x.xx
+
+
+
+snapmirror
+net interface create -lif snapmirror1 -vserver pswsclus -role intercluster -home-node cluster01 -home-port e0c -address xxx.xx.x.xx -netmask xxx.xx.x.xx
+
+net interface create -lif snapmirror2 -vserver pswsclus -role intercluster -home-node pswsclus-02 -home-port e0c -address xxx.xx.x.xx -netmask xxx.xx.x.xx
+
+Check
+net interface show -role intercluster
+
+Create cluster peer (src)
+
+pswsclus::> cluster peer create -peer-addrs xxx.xx.x.xx
+
+Notice: Choose a passphrase of 8 or more characters. To ensure the authenticity of the peering relationship, use a phrase or sequence of characters that
+        would be hard to guess.
+
+Enter the passphrase:
+Confirm the passphrase:
+
+Notice: Now use the same passphrase in the "cluster peer create" command in the other cluster.
+
+pswsclus::>
+
+pswsclus::> net interface show -role intercluster
+  (network interface show)
+            Logical    Status     Network            Current       Current Is
+Vserver     Interface  Admin/Oper Address/Mask       Node          Port    Home
+----------- ---------- ---------- ------------------ ------------- ------- ----
+pswsclus
+            snapmirror1  up/up    xxx.xx.x.xx/XX  　cluster01  　  e0c     true
+            snapmirror2  up/up    xxx.xx.x.xx/XX  　pswsclus-02    e0c     true
+2 entries were displayed.
+
+cluster ssh login (dst)
+
+ps-8200-c::> cluster peer show
+Peer Cluster Name         Cluster Serial Number Availability   Authentication
+------------------------- --------------------- -------------- --------------
+ps-3250-A                 1-80-000050           Available      ok
+ps-3250-b                 1-80-000050           Available      ok
+
+
+ps-8200-c::> cluster peer create -peer-addrs xxx.xx.x.xx -ipspace Default
+
+Notice: Choose a passphrase of 8 or more characters. To ensure the authenticity
+        of the peering relationship, use a phrase or sequence of characters
+        that would be hard to guess.
+
+ps-8200-c::> cluster peer show
+Peer Cluster Name         Cluster Serial Number Availability   Authentication
+------------------------- --------------------- -------------- --------------
+ps-3250-A                 1-80-000050           Available      ok
+ps-3250-b                 1-80-000050           Available      ok
+pswsclus                  1-80-000011           Available      ok
+3 entries were displayed
+
+peer connection Check(src)
+
+pswsclus::> cluster peer show
+Peer Cluster Name         Cluster Serial Number Availability   Authentication
+------------------------- --------------------- -------------- --------------
+ps-8200-c                 1-80-000050           Available      ok
+
+SVM P2P peer Establish
+
+vserver peer create -vserver svm01 -peer-vserver pstmpcifs -applications snapmirror -peer-cluster ps-8200-c
+
+SVM pending Check (dst)
+vserver peer show -vserver pstmpcifs
+            Peer        Peer                           Peering        Remote
+Vserver     Vserver     State        Peer Cluster      Applications   Vserver
+----------- ----------- ------------ ----------------- -------------- ---------
+pstmpcifs   svm01       pending      pswsclus          snapmirror     svm01
+
+accept peer Check (dst)
+
+pss-8200-c::> vserver peer accept -vserver pstmpcifs -peer-vserver svm01       -
+
+Info: [Job 2564] 'vserver peer accept' job queued
+
+ps-8200-c::> vserver peer show -vserver pstmpcifs
+            Peer        Peer                           Peering        Remote
+Vserver     Vserver     State        Peer Cluster      Applications   Vserver
+----------- ----------- ------------ ----------------- -------------- ---------
+pstmpcifs   svm01       peered       pswsclus          snapmirror     svm01
+
+ps-8200-c::>
+
+peer Establish (src)
+
+pswsclus::> vserver peer show -vserver svm01
+            Peer        Peer                           Peering        Remote
+Vserver     Vserver     State        Peer Cluster      Applications   Vserver
+----------- ----------- ------------ ----------------- -------------- ---------
+svm01       pstmpcifs   peered       ps-8200-c         snapmirror     pstmpcifs
+
+Create DP volume（dst）
+ps-8200-c::> vol create -vserver pstmpcifs -volume testvol2 -aggregate aggr1_node1 -type DP
+
+Warning: The export-policy "default" has no rules in it. The volume will
+         therefore be inaccessible.
+Do you want to continue? {y|n}: y
+[Job 2565] Job succeeded: Successful
+
+ps-8200-c::>
+
+snapmiror Create a relationship
+ps-8200-c::> snapmirror create -source-path svm01:vol_nfs01 -destination-path pstmpcifs:testvol2 -type DP
+Operation succeeded: snapmirror create for the relationship with destination "pstmpcifs:testvol2".
+ps-8200-c::> snapmirror show -vserver pstmpcifs
+                                                                       Progress
+Source            Destination Mirror  Relationship   Total             Last
+Path        Type  Path        State   Status         Progress  Healthy Updated
+----------- ---- ------------ ------- -------------- --------- ------- --------
+svm01:vol_nfs01
+            DP   pstmpcifs:testvol2
+                              Uninitialized
+                                      Idle           -         true    -
+
+
+
+Initial transfer（dst）
+ps-8200-c::> snapmirror initialize pstmpcifs:testvol2
+Operation is queued: snapmirror initialize of destination "pstmpcifs:testvol2".
+
+ps-8200-c::> snapmirror show -vserver pstmpcifs
+                                                                       Progress
+Source            Destination Mirror  Relationship   Total             Last
+Path        Type  Path        State   Status         Progress  Healthy Updated
+----------- ---- ------------ ------- -------------- --------- ------- --------
+svm01:vol_nfs01
+            DP   pstmpcifs:testvol2
+                              Snapmirrored
+                                      Idle           -         true    -
+
+autosupport Configuration
+
+pswsclus::> autosupport show -instance
+
+                                       Node: cluster01
+                                      State: enable
+                            SMTP Mail Hosts: mailhost
+                               From Address: Postmaster
+                       List of To Addresses: -
+      (DEPRECATED) List of Noteto Addresses: -
+                  List of Partner Addresses: -
+Send AutoSupport Messages to Vendor Support: enable
+                Protocol to Contact Support: https
+                 Support URL for HTTP/HTTPS: support.netapp.com/asupprod/post/1.0/postAsup
+                 Support URL for HTTP/S PUT: support.netapp.com/put/AsupPut
+                          Support Proxy URL:
+                            Support Address: autosupport@netapp.com
+                           Hostname Subject: false
+                                 NHT Enable: true
+                    Performance Data Enable: true
+                             Retry Interval: 4m
+                                Retry Count: 15
+                            Reminder Enable: true
+                          Last Subject Sent: MANAGEMENT_LOG
+                             Last Time Sent: 8/8/2017 00:25:35
+                          Maximum HTTP Size: 50MB
+                          Maximum SMTP Size: 5MB
+                      Remove Sensitive Data: false
+      Validate Digital Certificate Received: true
+            AutoSupport OnDemand Server URL: https://support.netapp.com/aods/asupmessage
+
+                                       Node: pswsclus-02
+                                      State: enable
+                            SMTP Mail Hosts: mailhost
+                               From Address: Postmaster
+                       List of To Addresses: -
+      (DEPRECATED) List of Noteto Addresses: -
+                  List of Partner Addresses: -
+Send AutoSupport Messages to Vendor Support: enable
+                Protocol to Contact Support: https
+                 Support URL for HTTP/HTTPS: support.netapp.com/asupprod/post/1.0/postAsup
+                 Support URL for HTTP/S PUT: support.netapp.com/put/AsupPut
+                          Support Proxy URL:
+                            Support Address: autosupport@netapp.com
+                           Hostname Subject: false
+                                 NHT Enable: true
+                    Performance Data Enable: true
+                             Retry Interval: 4m
+                                Retry Count: 15
+                            Reminder Enable: true
+                          Last Subject Sent: MANAGEMENT_LOG
+                             Last Time Sent: 8/8/2017 00:25:31
+                          Maximum HTTP Size: 50MB
+                          Maximum SMTP Size: 5MB
+                      Remove Sensitive Data: false
+      Validate Digital Certificate Received: true
+            AutoSupport OnDemand Server URL: https://support.netapp.com/aods/asupmessage
+2 entries were displayed.
+
+pswsclus::> autosupport modify -node pswsclus-0
+    cluster01 pswsclus-02
+pswsclus::> autosupport modify -node * -
+    -state                        -mail-hosts
+    -from                         -to
+    -noteto                       -partner-address
+    -support                      -transport
+    -proxy-url                    -hostname-subj
+    -nht                          -perf
+    -retry-interval               -retry-count
+    -reminder                     -max-http-size
+    -max-smtp-size                -remove-private-data
+    -validate-digital-certificate
+pswsclus::> autosupport modify -node * -to xxxx.@gmail.com
+2 entries were modified.
+
+pswsclus::> autosupport show -instance
+
+                                       Node: cluster01
+                                      State: enable
+                            SMTP Mail Hosts: mailhost
+                               From Address: Postmaster
+                       List of To Addresses: xxxx@gmail.com
+      (DEPRECATED) List of Noteto Addresses: -
+                  List of Partner Addresses: -
+Send AutoSupport Messages to Vendor Support: enable
+                Protocol to Contact Support: https
+                 Support URL for HTTP/HTTPS: support.netapp.com/asupprod/post/1.0/postAsup
+                 Support URL for HTTP/S PUT: support.netapp.com/put/AsupPut
+                          Support Proxy URL:
+                            Support Address: autosupport@netapp.com
+                           Hostname Subject: false
+                                 NHT Enable: true
+                    Performance Data Enable: true
+                             Retry Interval: 4m
+                                Retry Count: 15
+                            Reminder Enable: true
+                          Last Subject Sent: MANAGEMENT_LOG
+                             Last Time Sent: 8/8/2017 00:25:35
+                          Maximum HTTP Size: 50MB
+                          Maximum SMTP Size: 5MB
+                      Remove Sensitive Data: false
+      Validate Digital Certificate Received: true
+            AutoSupport OnDemand Server URL: https://support.netapp.com/aods/asupmessage
+
+                                       Node: pswsclus-02
+                                      State: enable
+                            SMTP Mail Hosts: mailhost
+                               From Address: Postmaster
+                       List of To Addresses: xxxx.@gmail.com
+      (DEPRECATED) List of Noteto Addresses: -
+                  List of Partner Addresses: -
+Send AutoSupport Messages to Vendor Support: enable
+                Protocol to Contact Support: https
+                 Support URL for HTTP/HTTPS: support.netapp.com/asupprod/post/1.0/postAsup
+                 Support URL for HTTP/S PUT: support.netapp.com/put/AsupPut
+                          Support Proxy URL:
+                            Support Address: autosupport@netapp.com
+                           Hostname Subject: false
+                                 NHT Enable: true
+                    Performance Data Enable: true
+                             Retry Interval: 4m
+                                Retry Count: 15
+                            Reminder Enable: true
+                          Last Subject Sent: MANAGEMENT_LOG
+                             Last Time Sent: 8/8/2017 00:25:31
+                          Maximum HTTP Size: 50MB
+                          Maximum SMTP Size: 5MB
+                      Remove Sensitive Data: false
+      Validate Digital Certificate Received: true
+            AutoSupport OnDemand Server URL: https://support.netapp.com/aods/asupmessage
+2 entries were displayed.
+
+pswsclus::> autosupport modify -node * -bend
+
+Error: invalid argument "-bend"
+pswsclus::> autosupport modify -node * -vend
+
+Error: invalid argument "-vend"
+pswsclus::> autosupport modify -node * -vend
+
+Error: invalid argument "-vend"
+pswsclus::> autosupport modify -node * -vend
+
+Error: invalid argument "-vend"
+pswsclus::> autosupport modify -node * -ven
+
+Error: invalid argument "-ven"
+pswsclus::> autosupport modify -node * -vende
+
+Error: invalid argument "-vende"
+pswsclus::> autosupport modify -node * -
+    -state                        -mail-hosts
+    -from                         -to
+    -noteto                       -partner-address
+    -support                      -transport
+    -proxy-url                    -hostname-subj
+    -nht                          -perf
+    -retry-interval               -retry-count
+    -reminder                     -max-http-size
+    -max-smtp-size                -remove-private-data
+    -validate-digital-certificate
+
+pswsclus::> autosupport modify -node * -
+    -state                        -mail-hosts
+    -from                         -to
+    -noteto                       -partner-address
+    -support                      -transport
+    -proxy-url                    -hostname-subj
+    -nht                          -perf
+    -retry-interval               -retry-count
+    -reminder                     -max-http-size
+    -max-smtp-size                -remove-private-data
+    -validate-digital-certificate
+
+pswsclus::> autosupport modify -node * -supo
+
+Error: invalid argument "-supo"
+pswsclus::> autosupport modify -node * -support
+    enable  disable
+
+pswsclus::> autosupport modify -node * -support disable
+2 entries were modified.
+
+pswsclus::> autosupport show -instance
+
+                                       Node: cluster01
+                                      State: enable
+                            SMTP Mail Hosts: mailhost
+                               From Address: Postmaster
+                       List of To Addresses: xxxx@gmail.com
+      (DEPRECATED) List of Noteto Addresses: -
+                  List of Partner Addresses: -
+Send AutoSupport Messages to Vendor Support: disable
+                Protocol to Contact Support: https
+                 Support URL for HTTP/HTTPS: support.netapp.com/asupprod/post/1.0/postAsup
+                 Support URL for HTTP/S PUT: support.netapp.com/put/AsupPut
+                          Support Proxy URL:
+                            Support Address: autosupport@netapp.com
+                           Hostname Subject: false
+                                 NHT Enable: true
+                    Performance Data Enable: true
+                             Retry Interval: 4m
+                                Retry Count: 15
+                            Reminder Enable: true
+                          Last Subject Sent: MANAGEMENT_LOG
+                             Last Time Sent: 8/8/2017 03:25:35
+                          Maximum HTTP Size: 50MB
+                          Maximum SMTP Size: 5MB
+                      Remove Sensitive Data: false
+      Validate Digital Certificate Received: true
+            AutoSupport OnDemand Server URL: https://support.netapp.com/aods/asupmessage
+
+                                       Node: pswsclus-02
+                                      State: enable
+                            SMTP Mail Hosts: mailhost
+                               From Address: Postmaster
+                       List of To Addresses: xxxxxxxxx
+      (DEPRECATED) List of Noteto Addresses: -
+                  List of Partner Addresses: -
+Send AutoSupport Messages to Vendor Support: disable
+                Protocol to Contact Support: https
+                 Support URL for HTTP/HTTPS: support.netapp.com/asupprod/post/1.0/postAsup
+                 Support URL for HTTP/S PUT: support.netapp.com/put/AsupPut
+                          Support Proxy URL:
+                            Support Address: autosupport@netapp.com
+                           Hostname Subject: false
+                                 NHT Enable: true
+                    Performance Data Enable: true
+                             Retry Interval: 4m
+                                Retry Count: 15
+                            Reminder Enable: true
+                          Last Subject Sent: MANAGEMENT_LOG
+                             Last Time Sent: 8/8/2017 00:25:31
+                          Maximum HTTP Size: 50MB
+                          Maximum SMTP Size: 5MB
+                      Remove Sensitive Data: false
+      Validate Digital Certificate Received: true
+            AutoSupport OnDemand Server URL: https://support.netapp.com/aods/asupmessage
+2 entries were displayed.
+
+pswsclus::> autosupport modify s
+
+Error: the value "s" is invalid for type <nodename>
+pswsclus::> autosupport modify -node pswsclus-0
+    cluster01 pswsclus-02
+pswsclus::> autosupport modify -node pswsclus-0
+    cluster01 pswsclus-02
+
+pswsclus::> autosupport modify -node * -
+    -state                        -mail-hosts
+    -from                         -to
+    -noteto                       -partner-address
+    -support                      -transport
+    -proxy-url                    -hostname-subj
+    -nht                          -perf
+    -retry-interval               -retry-count
+    -reminder                     -max-http-size
+    -max-smtp-size                -remove-private-data
+    -validate-digital-certificate
+pswsclus::> autosupport modify -node * -mail-hosts xxx.xxx.xxx.x
+
+Warning: SMTP connectivity check failed for destination: xxx.xxx.xxx.x. LibCurl Error (28): Timeout was reached.
+Do you want to continue? {y|n}: y
+2 entries were modified.
+
+pswsclus::> autosupport show -instance
+
+                                       Node: cluster01
+                                      State: enable
+                            SMTP Mail Hosts: xxx.xxx.xx.x
+                               From Address: Postmaster
+                       List of To Addresses: xxxxxxxxx
+      (DEPRECATED) List of Noteto Addresses: -
+                  List of Partner Addresses: -
+Send AutoSupport Messages to Vendor Support: disable
+                Protocol to Contact Support: https
+                 Support URL for HTTP/HTTPS: support.netapp.com/asupprod/post/1.0/postAsup
+                 Support URL for HTTP/S PUT: support.netapp.com/put/AsupPut
+                          Support Proxy URL:
+                            Support Address: autosupport@netapp.com
+                           Hostname Subject: false
+                                 NHT Enable: true
+                    Performance Data Enable: true
+                             Retry Interval: 4m
+                                Retry Count: 15
+                            Reminder Enable: true
+                          Last Subject Sent: MANAGEMENT_LOG
+                             Last Time Sent: 8/8/2017 03:25:35
+                          Maximum HTTP Size: 50MB
+                          Maximum SMTP Size: 5MB
+                      Remove Sensitive Data: false
+      Validate Digital Certificate Received: true
+            AutoSupport OnDemand Server URL: https://support.netapp.com/aods/asupmessage
+
+                                       Node: pswsclus-02
+                                      State: enable
+                            SMTP Mail Hosts: xxx.xxx.xxx.x
+                               From Address: Postmaster
+                       List of To Addresses: xxxxxxxxxx
+      (DEPRE
+                                  Node: pswsclus-02
+                                      State: enable
+                            SMTP Mail Hosts: mailhost
+                               From Address: Postmaster
+                       List of To Addresses: -
+      (DEPRECATED) List of Noteto Addresses: -
+                  List of Partner Addresses: -
+Send AutoSupport Messages to Vendor Support: enable
+                Protocol to Contact Support: https
+                 Support URL for HTTP/HTTPS: support.netapp.com/asupprod/post/1.0/postAsup
+                 Support URL for HTTP/S PUT: support.netapp.com/put/AsupPut
+                          Support Proxy URL:
+                            Support Address: autosupport@netapp.com
+                           Hostname Subject: false
+                                 NHT Enable: true
+                    Performance Data Enable: true
+                             Retry Interval: 4m
+                                Retry Count: 15
+                            Reminder Enable: true
+                          Last Subject Sent: MANAGEMENT_LOG
+                             Last Time Sent: 8/8/2017 03:25:31
+                          Maximum HTTP Size: 50MB
+                          Maximum SMTP Size: 5MB
+                      Remove Sensitive Data: false
+      Validate Digital Certificate Received: true
+            AutoSupport OnDemand Server URL: https://support.netapp.com/aods/asupmessage
